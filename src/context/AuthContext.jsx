@@ -20,20 +20,23 @@ export function AuthProvider({ children }) {
       const u = session.user
       if (mounted) setUser(u)
 
-      // Try local profile first (offline)
       const local = await db.profiles.get(u.id)
       if (local && mounted) setProfile(local)
 
-      // Sync from Supabase
       const { data } = await supabase.from('profiles').select('*').eq('id', u.id).maybeSingle()
       if (data) {
         await db.profiles.put(data)
         if (mounted) setProfile(data)
       } else {
-        // Auto-create profile
+        // Auto-create profile with a generated avatar
         const username = u.email ? u.email.split('@')[0] : 'user'
-        const newProfile = { id: u.id, username, phone: '' }
-        await supabase.from('profiles').insert(newProfile).select().maybeSingle()
+        const newProfile = { 
+          id: u.id, 
+          username, 
+          phone: '',
+          avatar_url: `https://api.dicebear.com/7.x/adventurer/svg?seed=${username}` 
+        }
+        await supabase.from('profiles').upsert(newProfile)
         await db.profiles.put(newProfile)
         if (mounted) setProfile(newProfile)
       }
@@ -50,26 +53,19 @@ export function AuthProvider({ children }) {
   }, [])
 
   const signUp = async (email, password, username) => {
-    const { data, error } = await supabase.auth.signUp({ 
-      email, 
-      password,
-      options: {
-        data: { username } // Saves username to user metadata just in case
-      }
-    })
+    const { data, error } = await supabase.auth.signUp({ email, password, options: { data: { username } } })
     if (error) throw error
     
-    // Immediately create the profile
     if (data.user) {
-      const p = { id: data.user.id, username: username || email.split('@')[0], phone: '' }
+      const p = { 
+        id: data.user.id, 
+        username: username || email.split('@')[0], 
+        phone: '',
+        avatar_url: `https://api.dicebear.com/7.x/adventurer/svg?seed=${username || email}`
+      }
       await supabase.from('profiles').upsert(p)
       await db.profiles.put(p)
-      
-      // Force user state immediately to trigger the UI switch to /chat
-      if (data.session) {
-        setUser(data.user)
-        setProfile(p)
-      }
+      if (data.session) { setUser(data.user); setProfile(p) }
     }
     return data
   }
