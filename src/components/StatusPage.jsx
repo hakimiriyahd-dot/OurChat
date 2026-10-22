@@ -3,9 +3,9 @@ import { useAuth } from '../context/AuthContext'
 import { supabase } from '../supabase'
 import { db } from '../db'
 import { v4 as uuid } from 'uuid'
-import { Plus, X } from 'lucide-react'
+import { Plus, X, ArrowLeft } from 'lucide-react'
 
-export default function StatusPage() {
+export default function StatusPage({ onBack }) {
   const { user } = useAuth()
   const [statuses, setStatuses] = useState([])
   const [composer, setComposer] = useState(false)
@@ -32,8 +32,11 @@ export default function StatusPage() {
 
   return (
     <div className="flex flex-col h-full" style={{ background: 'var(--bg-primary)' }}>
-      <div className="flex items-center justify-between px-6 py-3" style={{ background: 'var(--header)' }}>
-        <h1 className="text-white text-lg font-medium">Status</h1>
+      <div className="flex items-center justify-between px-4 py-3" style={{ background: 'var(--header)' }}>
+        <div className="flex items-center gap-4">
+          <button onClick={onBack} className="text-white sm:hidden"><ArrowLeft size={20}/></button>
+          <h1 className="text-white text-lg font-medium">Status</h1>
+        </div>
         <button onClick={() => setComposer(c => !c)} className="text-white p-2 rounded hover:bg-white/10">
           {composer ? <X size={20}/> : <Plus size={20}/>}
         </button>
