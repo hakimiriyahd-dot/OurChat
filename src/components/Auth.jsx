@@ -14,11 +14,18 @@ export default function Auth() {
     e.preventDefault()
     setErr(''); setBusy(true)
     try {
-      if (mode === 'login') await signIn(email, password)
-      else await signUp(email, password, username)
+      if (mode === 'login') {
+        await signIn(email, password)
+      } else {
+        await signUp(email, password, username)
+        // The AuthContext will instantly update the user state, 
+        // and App.jsx will automatically switch to the Chat UI.
+      }
     } catch (e) {
       setErr(e.message || 'Something went wrong')
-    } finally { setBusy(false) }
+    } finally { 
+      setBusy(false) 
+    }
   }
 
   return (
@@ -48,13 +55,15 @@ export default function Auth() {
             style={{ background: 'var(--bg-secondary)', color: 'var(--text-primary)', borderColor: 'rgba(0,0,0,0.1)' }}
             type="password" placeholder="Password" value={password} onChange={e => setPassword(e.target.value)} required minLength={6}
           />
-          {err && <div className="text-sm text-red-500">{err}</div>}
-          <button disabled={busy} className="w-full p-3 rounded-lg text-white font-semibold disabled:opacity-60" style={{ background: 'var(--accent)' }}>
+          
+          {err && <div className="text-sm text-red-500 font-medium">{err}</div>}
+          
+          <button disabled={busy} className="w-full p-3 rounded-lg text-white font-semibold disabled:opacity-60 transition-opacity" style={{ background: 'var(--accent)' }}>
             {busy ? 'Please wait…' : (mode === 'login' ? 'Sign In' : 'Create Account')}
           </button>
         </form>
 
-        <button className="mt-4 text-sm w-full" style={{ color: 'var(--accent)' }}
+        <button className="mt-4 text-sm w-full hover:underline" style={{ color: 'var(--accent)' }}
                 onClick={() => { setMode(mode === 'login' ? 'signup' : 'login'); setErr('') }}>
           {mode === 'login' ? 'No account? Sign up' : 'Have an account? Sign in'}
         </button>
