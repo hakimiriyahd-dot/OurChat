@@ -31,12 +31,21 @@ export default function ChatWindow({ chatId, onClose }) {
       const ms = await db.chat_members.where('chat_id').equals(chatId).toArray()
       if (!cancelled) setMembers(ms)
       
-      // Find the OTHER person's profile if it's a 1-on-1 chat
+      // Find the OTHER person's profile
       if (c && !c.is_group) {
         const otherId = ms.find(m => m.user_id !== user.id)?.user_id
         if (otherId) {
           const p = await db.profiles.get(otherId)
-          if (!cancelled) setOtherProfile(p)
+          if (p) {
+            if (!cancelled) setOtherProfile(p)
+          } else if (navigator.onLine) {
+             // Fallback fetch from Supabase
+             const { data } = await supabase.from('profiles').select('*').eq('id', otherId).single()
+             if (data) {
+               await db.profiles.put(data)
+               if (!cancelled) setOtherProfile(data)
+             }
+          }
         }
       }
 
@@ -133,23 +142,31 @@ export default function ChatWindow({ chatId, onClose }) {
       pending_sync: navigator.onLine ? 0 : 1,
       ...extra
     }
+    
+    // 1. Save locally
     await db.messages.put(msg)
     setMessages(prev => [...prev, msg])
     setReplyTo(null)
     setTimeout(() => scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: 'smooth' }), 50)
 
     if (navigator.onLine) {
+      // 2. Send to Supabase
       const { error } = await supabase.from('messages').insert(msg)
-      if (error) console.error("Message send error:", error)
-      
-      if (!error) {
-        await db.messages.update(id, { pending_sync: 0 })
-        for (const m of members) {
-          await supabase.from('message_status').insert({ message_id: id, user_id: m.user_id, status: 'sent' })
-          await db.message_status.put({ message_id: id, user_id: m.user_id, status: 'sent' })
-        }
-        await supabase.from('chats').update({ last_message_at: msg.created_at }).eq('id', chatId)
+      if (error) {
+        console.error("Message send error:", error)
+        return;
       }
+      
+      await db.messages.update(id, { pending_sync: 0 })
+      
+      // 3. Create message statuses for all members (Sent tick)
+      for (const m of members) {
+        await supabase.from('message_status').insert({ message_id: id, user_id: m.user_id, status: 'sent' })
+        await db.message_status.put({ message_id: id, user_id: m.user_id, status: 'sent' })
+      }
+      
+      // 4. Update chat timestamp
+      await supabase.from('chats').update({ last_message_at: msg.created_at }).eq('id', chatId)
     }
   }
 
@@ -198,7 +215,7 @@ export default function ChatWindow({ chatId, onClose }) {
   }
 
   const headerName = chat?.is_group ? (chat?.name || 'Group') : (otherProfile?.username || 'Chat')
-  const headerAvatar = chat?.is_group ? null : otherProfile?.avatar_url
+  const headerAvatar = chat?.is_group ? null : otherProfile?.avatar_url || `https://api.dicebear.com/7.x/adventurer/svg?seed=${user.id}`
   const pinnedMsg = pinned.length ? messages.find(m => m.id === pinned[0]) : null
 
   return (
@@ -249,7 +266,7 @@ export default function ChatWindow({ chatId, onClose }) {
               sameSender={sameSender}
               statuses={statuses[m.id] || []}
               reactions={reactions[m.id] || []}
-              senderName={chat?.is_group ? 'Group Member' : headerName} // Use headerName for 1-on-1
+              senderName={chat?.is_group ? 'Group Member' : headerName}
               isPinned={pinned.includes(m.id)}
               replyTo={m.reply_to_id ? messages.find(x => x.id === m.reply_to_id) : null}
               onReply={() => setReplyTo(m)}
