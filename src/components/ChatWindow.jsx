@@ -31,7 +31,6 @@ export default function ChatWindow({ chatId, onClose }) {
       const ms = await db.chat_members.where('chat_id').equals(chatId).toArray()
       if (!cancelled) setMembers(ms)
       
-      // Find the OTHER person's profile
       if (c && !c.is_group) {
         const otherId = ms.find(m => m.user_id !== user.id)?.user_id
         if (otherId) {
@@ -39,7 +38,6 @@ export default function ChatWindow({ chatId, onClose }) {
           if (p) {
             if (!cancelled) setOtherProfile(p)
           } else if (navigator.onLine) {
-             // Fallback fetch from Supabase
              const { data } = await supabase.from('profiles').select('*').eq('id', otherId).single()
              if (data) {
                await db.profiles.put(data)
@@ -111,23 +109,40 @@ export default function ChatWindow({ chatId, onClose }) {
   }
 
   useEffect(() => {
+    // NOTE: Removed the `filter` from postgres_changes. 
+    // It's much more reliable to listen to all inserts and filter in JS.
     const ch = supabase.channel(`chat-${chatId}`)
-      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'messages', filter: `chat_id=eq.${chatId}` },
-        async payload => { await db.messages.put(payload.new); loadMessages() })
-      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'messages', filter: `chat_id=eq.${chatId}` },
-        async payload => { await db.messages.put(payload.new); loadMessages() })
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'messages' },
+        async payload => { 
+          if (payload.new.chat_id === chatId) {
+            await db.messages.put(payload.new); 
+            loadMessages(); 
+          }
+        })
+      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'messages' },
+        async payload => { 
+          if (payload.new.chat_id === chatId) {
+            await db.messages.put(payload.new); 
+            loadMessages(); 
+          }
+        })
       .on('postgres_changes', { event: '*', schema: 'public', table: 'message_status' },
-        async payload => { const row = payload.new || payload.old; if (row) { await db.message_status.put(row); loadMessages() } })
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'chat_activity', filter: `chat_id=eq.${chatId}` },
+        async payload => { 
+          const row = payload.new || payload.old; 
+          if (row) { await db.message_status.put(row); loadMessages() } 
+        })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'chat_activity' },
         payload => {
           const row = payload.new
-          if (row && row.user_id !== user.id && row.activity_type === 'typing') {
+          if (row && row.chat_id === chatId && row.user_id !== user.id && row.activity_type === 'typing') {
             setTyping(otherProfile?.username || 'Someone')
             clearTimeout(activityTimerRef.current)
             activityTimerRef.current = setTimeout(() => setTyping(null), 3500)
           }
         })
-      .subscribe()
+      .subscribe((status) => {
+        console.log('Realtime status:', status); // Check your browser console to ensure it says "SUBSCRIBED"
+      })
     return () => { supabase.removeChannel(ch) }
   }, [chatId, user.id, otherProfile])
 
@@ -143,14 +158,12 @@ export default function ChatWindow({ chatId, onClose }) {
       ...extra
     }
     
-    // 1. Save locally
     await db.messages.put(msg)
     setMessages(prev => [...prev, msg])
     setReplyTo(null)
     setTimeout(() => scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: 'smooth' }), 50)
 
     if (navigator.onLine) {
-      // 2. Send to Supabase
       const { error } = await supabase.from('messages').insert(msg)
       if (error) {
         console.error("Message send error:", error)
@@ -159,13 +172,11 @@ export default function ChatWindow({ chatId, onClose }) {
       
       await db.messages.update(id, { pending_sync: 0 })
       
-      // 3. Create message statuses for all members (Sent tick)
       for (const m of members) {
         await supabase.from('message_status').insert({ message_id: id, user_id: m.user_id, status: 'sent' })
         await db.message_status.put({ message_id: id, user_id: m.user_id, status: 'sent' })
       }
       
-      // 4. Update chat timestamp
       await supabase.from('chats').update({ last_message_at: msg.created_at }).eq('id', chatId)
     }
   }
@@ -220,7 +231,6 @@ export default function ChatWindow({ chatId, onClose }) {
 
   return (
     <div className="flex flex-col h-full" style={{ background: 'var(--bg-chat)' }}>
-      {/* Header */}
       <div className="flex items-center gap-3 px-4 py-2 flex-shrink-0" style={{ background: 'var(--header)' }}>
         <button className="sm:hidden text-white p-1" onClick={onClose}><ArrowLeft size={20}/></button>
         
@@ -243,7 +253,6 @@ export default function ChatWindow({ chatId, onClose }) {
         </div>
       </div>
 
-      {/* Pinned bar */}
       {pinnedMsg && (
         <div className="px-3 py-2 flex items-center gap-2 text-sm" style={{ background: 'var(--bg-secondary)' }}>
           <Pin size={14} style={{ color: 'var(--accent)' }}/>
@@ -253,7 +262,6 @@ export default function ChatWindow({ chatId, onClose }) {
         </div>
       )}
 
-      {/* Messages */}
       <div ref={scrollRef} className="flex-1 overflow-y-auto px-2 sm:px-6 py-4 scrollbar-thin chat-wallpaper space-y-1">
         {messages.map((m, i) => {
           const prev = messages[i - 1]
@@ -279,7 +287,6 @@ export default function ChatWindow({ chatId, onClose }) {
         })}
       </div>
 
-      {/* Input */}
       <MessageInput onSend={sendMessage} onTyping={onTyping} replyTo={replyTo} onCancelReply={() => setReplyTo(null)} />
     </div>
   )
