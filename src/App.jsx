@@ -13,8 +13,7 @@ function EmptyState() {
   return (
     <div className="h-full flex flex-col items-center justify-center text-center px-8"
          style={{ background: 'var(--bg-secondary)', color: 'var(--text-secondary)' }}>
-      <div className="w-40 h-40 rounded-full mb-6 flex items-center justify-center"
-           style={{ background: 'var(--bg-chat)' }}>
+      <div className="w-40 h-40 rounded-full mb-6 flex items-center justify-center" style={{ background: 'var(--bg-chat)' }}>
         <svg viewBox="0 0 24 24" width="80" height="80" fill="var(--accent)">
           <path d="M20 2H4a2 2 0 0 0-2 2v18l4-4h14a2 2 0 0 0 2-2V4a2 2 0 0 0-2-2z"/>
         </svg>
@@ -33,30 +32,36 @@ export default function App() {
   const [view, setView] = useState('chats')
   const [activeChatId, setActiveChatId] = useState(null)
 
-  if (loading) {
-    return <div className="h-screen w-screen flex items-center justify-center" style={{ background: 'var(--bg-secondary)', color: 'var(--text-primary)' }}>Loading…</div>
-  }
+  if (loading) return <div className="h-screen w-screen flex items-center justify-center" style={{ background: 'var(--bg-secondary)' }}>Loading…</div>
   if (!user) return <Auth />
+
+  const handleBackToChats = () => {
+    setActiveChatId(null);
+    setView('chats');
+  };
+
+  // Mobile logic: Hide sidebar if we are viewing a chat or another screen
+  const showSidebarOnMobile = activeChatId === null && view === 'chats';
 
   return (
     <div className="flex h-screen w-screen overflow-hidden" style={{ background: 'var(--bg-primary)', color: 'var(--text-primary)' }}>
-      <div className="w-full sm:w-[380px] flex-shrink-0 flex flex-col border-r" style={{ background: 'var(--bg-secondary)', borderColor: 'rgba(0,0,0,0.08)' }}>
-        <Sidebar
-          view={view}
-          setView={setView}
-          activeChatId={activeChatId}
-          setActiveChatId={setActiveChatId}
-        />
+      
+      {/* Sidebar Area */}
+      <div className={`w-full sm:w-[380px] flex-shrink-0 flex-col border-r ${showSidebarOnMobile ? 'flex' : 'hidden sm:flex'}`} 
+           style={{ background: 'var(--bg-secondary)', borderColor: 'rgba(0,0,0,0.08)' }}>
+        <Sidebar view={view} setView={setView} activeChatId={activeChatId} setActiveChatId={setActiveChatId} />
       </div>
-      <div className="flex-1 hidden sm:flex flex-col min-w-0">
+
+      {/* Right Pane Area */}
+      <div className={`flex-1 flex-col min-w-0 ${!showSidebarOnMobile ? 'flex' : 'hidden sm:flex'}`}>
         {view === 'chats' && (activeChatId
-          ? <ChatWindow chatId={activeChatId} onClose={() => setActiveChatId(null)} />
+          ? <ChatWindow chatId={activeChatId} onClose={handleBackToChats} />
           : <EmptyState />)}
-        {view === 'status' && <StatusPage />}
-        {view === 'starred' && <StarredMessages onOpenChat={(id) => { setView('chats'); setActiveChatId(id) }} />}
-        {view === 'archived' && <ArchivedChats onOpenChat={(id) => { setView('chats'); setActiveChatId(id) }} />}
-        {view === 'group-create' && <CreateGroup onCreated={(id) => { setView('chats'); setActiveChatId(id) }} />}
-        {view === 'settings' && <Settings />}
+        {view === 'status' && <StatusPage onBack={handleBackToChats} />}
+        {view === 'starred' && <StarredMessages onBack={handleBackToChats} onOpenChat={(id) => { setView('chats'); setActiveChatId(id) }} />}
+        {view === 'archived' && <ArchivedChats onBack={handleBackToChats} onOpenChat={(id) => { setView('chats'); setActiveChatId(id) }} />}
+        {view === 'group-create' && <CreateGroup onBack={handleBackToChats} onCreated={(id) => { setView('chats'); setActiveChatId(id) }} />}
+        {view === 'settings' && <Settings onBack={handleBackToChats} />}
       </div>
     </div>
   )
