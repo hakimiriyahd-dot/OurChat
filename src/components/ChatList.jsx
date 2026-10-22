@@ -3,7 +3,7 @@ import { useAuth } from '../context/AuthContext'
 import { supabase } from '../supabase'
 import { db } from '../db'
 import { format } from 'date-fns'
-import { Pin, Archive, Users, Check } from 'lucide-react'
+import { Pin, Users } from 'lucide-react'
 
 export default function ChatList({ filter, query, activeChatId, onSelect, onSwitchView }) {
   const { user } = useAuth()
@@ -11,31 +11,40 @@ export default function ChatList({ filter, query, activeChatId, onSelect, onSwit
 
   const load = async () => {
     if (!user) return
-    // Local
     const memberships = await db.chat_members.where('user_id').equals(user.id).toArray()
     const active = memberships.filter(m => !m.is_archived)
     const list = []
+    
     for (const m of active) {
       const chat = await db.chats.get(m.chat_id)
       if (!chat) continue
+      
       const lastMsgs = await db.messages.where('chat_id').equals(m.chat_id).toArray()
       lastMsgs.sort((a, b) => new Date(b.created_at) - new Date(a.created_at))
       const last = lastMsgs[0]
+      
       const unread = (await db.message_status.where('user_id').equals(user.id).toArray())
         .filter(s => s.status !== 'read')
         .filter(s => lastMsgs.some(mm => mm.id === s.message_id && mm.sender_id !== user.id))
         .length
+        
       let displayName = chat.name
+      let displayAvatar = null
+      
       if (!chat.is_group) {
         const otherMember = (await db.chat_members.where('chat_id').equals(chat.id).toArray())
           .find(x => x.user_id !== user.id)
         if (otherMember) {
           const p = await db.profiles.get(otherMember.user_id)
-          displayName = p?.username || 'Unknown'
+          displayName = p?.username || 'Unknown User'
+          displayAvatar = p?.avatar_url
+        } else {
+          displayName = 'Just You'
         }
       }
+
       list.push({
-        chat, member: m, last, displayName, unread,
+        chat, member: m, last, displayName, displayAvatar, unread,
         lastAt: chat.last_message_at || chat.created_at || last?.created_at
       })
     }
@@ -45,16 +54,32 @@ export default function ChatList({ filter, query, activeChatId, onSelect, onSwit
 
   const sync = async () => {
     if (!user || !navigator.onLine) return
+    
+    // 1. Sync my chats
     const { data: members } = await supabase.from('chat_members').select('*').eq('user_id', user.id)
     if (members) for (const m of members) await db.chat_members.put(m)
+    
     if (members?.length) {
       const ids = members.map(m => m.chat_id)
+      
+      // 2. Sync chat details
       const { data: chats } = await supabase.from('chats').select('*').in('id', ids)
       if (chats) for (const c of chats) await db.chats.put(c)
+      
+      // 3. Sync ALL members of these chats (so we know who we are talking to)
+      const { data: allMembers } = await supabase.from('chat_members').select('*').in('chat_id', ids)
+      if (allMembers) {
+        for (const am of allMembers) {
+          await db.chat_members.put(am)
+          // Fetch their profiles too!
+          const { data: p } = await supabase.from('profiles').select('*').eq('id', am.user_id).maybeSingle()
+          if (p) await db.profiles.put(p)
+        }
+      }
+      
+      // 4. Sync recent messages
       const { data: msgs } = await supabase.from('messages').select('*').in('chat_id', ids).order('created_at', { ascending: false }).limit(200)
       if (msgs) for (const msg of msgs) await db.messages.put(msg)
-      const { data: statuses } = await supabase.from('message_status').select('*').eq('user_id', user.id)
-      if (statuses) for (const s of statuses) await db.message_status.put(s)
     }
     load()
   }
@@ -73,7 +98,7 @@ export default function ChatList({ filter, query, activeChatId, onSelect, onSwit
   let filtered = items
   if (filter === 'unread') filtered = filtered.filter(i => i.unread > 0)
   if (filter === 'groups') filtered = filtered.filter(i => i.chat.is_group)
-  if (query) filtered = filtered.filter(i => i.displayName.toLowerCase().includes(query.toLowerCase()))
+  if (query) filtered = filtered.filter(i => i.displayName?.toLowerCase().includes(query.toLowerCase()))
 
   if (!filtered.length) {
     return (
@@ -81,7 +106,7 @@ export default function ChatList({ filter, query, activeChatId, onSelect, onSwit
         No chats yet.
         <div className="mt-2">
           <button className="underline" style={{ color: 'var(--accent)' }} onClick={() => onSwitchView('group-create')}>
-            Create a group
+            Start a chat
           </button>
         </div>
       </div>
@@ -97,10 +122,14 @@ export default function ChatList({ filter, query, activeChatId, onSelect, onSwit
           className="w-full flex items-center gap-3 px-3 py-3 text-left hover:bg-black/5 transition-colors"
           style={{ background: activeChatId === it.chat.id ? 'var(--bg-secondary)' : 'transparent' }}
         >
-          <div className="w-12 h-12 rounded-full flex items-center justify-center text-white flex-shrink-0"
-               style={{ background: it.chat.is_group ? '#6A7175' : 'var(--accent)' }}>
-            {it.chat.is_group ? <Users size={20}/> : it.displayName[0]?.toUpperCase()}
-          </div>
+          {it.chat.is_group ? (
+             <div className="w-12 h-12 rounded-full flex items-center justify-center text-white flex-shrink-0" style={{ background: '#6A7175' }}>
+               <Users size={20}/>
+             </div>
+          ) : (
+            <img src={it.displayAvatar} alt="avatar" className="w-12 h-12 rounded-full flex-shrink-0 bg-gray-200" />
+          )}
+          
           <div className="flex-1 min-w-0">
             <div className="flex items-center justify-between">
               <span className="font-medium text-sm truncate">{it.displayName}</span>
@@ -110,7 +139,7 @@ export default function ChatList({ filter, query, activeChatId, onSelect, onSwit
             </div>
             <div className="flex items-center justify-between">
               <span className="text-xs truncate" style={{ color: 'var(--text-secondary)' }}>
-                {it.last ? (it.last.is_deleted ? 'Message deleted' : (it.last.content || '[media]')) : 'No messages yet'}
+                {it.last ? (it.last.is_deleted ? 'Message deleted' : (it.last.content || '[media]')) : 'Start chatting'}
               </span>
               <div className="flex items-center gap-1">
                 {it.member.is_pinned && <Pin size={12} style={{ color: 'var(--text-secondary)' }}/>}
