@@ -50,12 +50,26 @@ export function AuthProvider({ children }) {
   }, [])
 
   const signUp = async (email, password, username) => {
-    const { data, error } = await supabase.auth.signUp({ email, password })
+    const { data, error } = await supabase.auth.signUp({ 
+      email, 
+      password,
+      options: {
+        data: { username } // Saves username to user metadata just in case
+      }
+    })
     if (error) throw error
+    
+    // Immediately create the profile
     if (data.user) {
       const p = { id: data.user.id, username: username || email.split('@')[0], phone: '' }
       await supabase.from('profiles').upsert(p)
       await db.profiles.put(p)
+      
+      // Force user state immediately to trigger the UI switch to /chat
+      if (data.session) {
+        setUser(data.user)
+        setProfile(p)
+      }
     }
     return data
   }
