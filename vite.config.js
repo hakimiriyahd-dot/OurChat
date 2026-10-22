@@ -3,6 +3,8 @@ import react from '@vitejs/plugin-react'
 import { VitePWA } from 'vite-plugin-pwa'
 
 export default defineConfig({
+  base: '/', // CRITICAL for Render static sites
+  envPrefix: ['VITE_', 'SUPABASE_'], // Allows your exact env names
   plugins: [
     react(),
     VitePWA({
