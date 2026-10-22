@@ -1,8 +1,9 @@
 import { useEffect, useState } from 'react'
 import { useAuth } from '../context/AuthContext'
 import { db } from '../db'
+import { ArrowLeft } from 'lucide-react'
 
-export default function ArchivedChats({ onOpenChat }) {
+export default function ArchivedChats({ onBack, onOpenChat }) {
   const { user } = useAuth()
   const [items, setItems] = useState([])
 
@@ -21,7 +22,8 @@ export default function ArchivedChats({ onOpenChat }) {
 
   return (
     <div className="flex flex-col h-full" style={{ background: 'var(--bg-primary)' }}>
-      <div className="px-6 py-3" style={{ background: 'var(--header)' }}>
+      <div className="px-4 py-3 flex items-center gap-4" style={{ background: 'var(--header)' }}>
+        <button onClick={onBack} className="text-white sm:hidden"><ArrowLeft size={20}/></button>
         <h1 className="text-white text-lg font-medium">Archived Chats</h1>
       </div>
       <div className="flex-1 overflow-y-auto p-4 space-y-2">
