@@ -37,7 +37,7 @@ export default function ChatList({ filter, query, activeChatId, onSelect, onSwit
         if (otherMember) {
           const p = await db.profiles.get(otherMember.user_id)
           displayName = p?.username || 'Unknown User'
-          displayAvatar = p?.avatar_url
+          displayAvatar = p?.avatar_url || `https://api.dicebear.com/7.x/adventurer/svg?seed=${otherMember.user_id}`
         } else {
           displayName = 'Just You'
         }
@@ -66,18 +66,27 @@ export default function ChatList({ filter, query, activeChatId, onSelect, onSwit
       const { data: chats } = await supabase.from('chats').select('*').in('id', ids)
       if (chats) for (const c of chats) await db.chats.put(c)
       
-      // 3. Sync ALL members of these chats (so we know who we are talking to)
+      // 3. Sync ALL members of these chats
       const { data: allMembers } = await supabase.from('chat_members').select('*').in('chat_id', ids)
       if (allMembers) {
+        const userIds = new Set()
         for (const am of allMembers) {
           await db.chat_members.put(am)
-          // Fetch their profiles too!
-          const { data: p } = await supabase.from('profiles').select('*').eq('id', am.user_id).maybeSingle()
-          if (p) await db.profiles.put(p)
+          userIds.add(am.user_id)
+        }
+        
+        // 4. Fetch profiles for ALL these users at once
+        const { data: profiles } = await supabase.from('profiles').select('*').in('id', Array.from(userIds))
+        if (profiles) {
+          for (const p of profiles) {
+             // Fallback avatar if missing in DB
+             if(!p.avatar_url) p.avatar_url = `https://api.dicebear.com/7.x/adventurer/svg?seed=${p.username || p.id}`
+             await db.profiles.put(p)
+          }
         }
       }
       
-      // 4. Sync recent messages
+      // 5. Sync recent messages
       const { data: msgs } = await supabase.from('messages').select('*').in('chat_id', ids).order('created_at', { ascending: false }).limit(200)
       if (msgs) for (const msg of msgs) await db.messages.put(msg)
     }
