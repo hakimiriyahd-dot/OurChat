@@ -18,10 +18,7 @@ export default function Sidebar({ view, setView, activeChatId, setActiveChatId }
       {/* Header */}
       <div className="flex items-center justify-between px-3 py-2" style={{ background: 'var(--header)' }}>
         <div className="flex items-center gap-3 cursor-pointer" onClick={() => setView('settings')}>
-          <div className="w-9 h-9 rounded-full flex items-center justify-center text-white font-semibold"
-               style={{ background: 'rgba(255,255,255,0.2)' }}>
-            {(profile?.username || 'U')[0].toUpperCase()}
-          </div>
+          <img src={profile?.avatar_url} alt="avatar" className="w-9 h-9 rounded-full bg-white/20" />
           <div className="text-white text-sm font-medium hover:underline">{profile?.username || 'You'}</div>
         </div>
         <div className="flex items-center gap-1 text-white relative">
