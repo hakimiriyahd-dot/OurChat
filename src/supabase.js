@@ -1,13 +1,11 @@
 import { createClient } from '@supabase/supabase-js'
 
-const url = import.meta.env.VITE_SUPABASE_URL
-const key = import.meta.env.VITE_SUPABASE_ANON_KEY
+// 1. Try Render/Vite env vars first
+// 2. Fall back to your exact provided keys so it NEVER crashes
+const supabaseUrl = import.meta.env.SUPABASE_URL || import.meta.env.VITE_SUPABASE_URL || 'https://opyrxgrwvuzcvbuynwmo.supabase.co';
 
-if (!url || !key) {
-  console.error('[OurChat] Missing Supabase env vars.')
-}
+const supabaseKey = import.meta.env.SUPABASE_PUBLISHABLE_KEY || import.meta.env.VITE_SUPABASE_ANON_KEY || 'sb_publishable_ZDsJRIPZPOP7Gv7MeyJqyg_b_-VxgK1';
 
-// ✅ This is the exact named export AuthContext is looking for
-export const supabase = createClient(url, key, {
+export const supabase = createClient(supabaseUrl, supabaseKey, {
   auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: true }
 })
