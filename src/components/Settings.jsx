@@ -1,17 +1,20 @@
 import { useTheme } from '../context/ThemeContext'
 import { useFont } from '../context/FontContext'
 import { useAuth } from '../context/AuthContext'
+import { ArrowLeft } from 'lucide-react'
 
-export default function Settings() {
+export default function Settings({ onBack }) {
   const { themeKey, setTheme, presets } = useTheme()
   const { fontKey, setFont, families, fontWeight, setWeight, fontStyle, setStyle, fontSize, setSize } = useFont()
   const { profile, signOut } = useAuth()
 
   return (
     <div className="flex flex-col h-full overflow-y-auto" style={{ background: 'var(--bg-primary)' }}>
-      <div className="px-6 py-3 sticky top-0" style={{ background: 'var(--header)' }}>
+      <div className="px-4 py-3 sticky top-0 flex items-center gap-4" style={{ background: 'var(--header)' }}>
+        <button onClick={onBack} className="text-white sm:hidden"><ArrowLeft size={20}/></button>
         <h1 className="text-white text-lg font-medium">Settings</h1>
       </div>
+      
       <div className="p-6 space-y-6 max-w-2xl">
         <div>
           <h2 className="font-semibold mb-2">Profile</h2>
